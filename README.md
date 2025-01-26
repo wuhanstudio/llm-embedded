@@ -6,17 +6,9 @@
 | ESP32 | 240 MHz | FreeRTOS | SPIFFS   | 25.30 token/s |
 | Raspi4 | 1.5GHz | Linux    | SD Card | 917.30 token/s |
 
-> Kendryte K210
+> Kendryte K210 / Raspberry Pi 4 / ESP32-S3
 
-![](k210.jpg)
-
-> ESP32-S3
-
-![](esp32.jpg)
-
-> Raspberry Pi 4
-
-![](raspi.jpg)
+![demo.jpg]
 
 ## K210 (RISC-V 64-bit)
 
