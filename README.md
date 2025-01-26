@@ -1,15 +1,26 @@
 # LLM Embedded
 
+| Hardware    | CPU | OS | Storage |Benchmark |
+| -------- | ----- | ------- | --- | -- |
+| K210  | 400 MHz | FreeRTOS | SD Card |  43.83 token/s |
+| ESP32 | 240 MHz | FreeRTOS | SPIFFS   | 25.30 token/s |
+| Raspi4 | 1.5GHz | Linux    | SD Card | 917.30 token/s |
+
 > Kendryte K210
-![k210.jpg]
+
+![](k210.jpg)
 
 > ESP32-S3
-![esp32.jpg]
+
+![](esp32.jpg)
 
 > Raspberry Pi 4
-![raspi.jpg]
+
+![](raspi.jpg)
 
 ## K210 (RISC-V 64-bit)
+
+### Prerequisites
 
 Download and install latest CMake.
 
@@ -19,6 +30,7 @@ Download and install the latest toolchain.
 
 [Download kendryte-toolchain-win-i386-8.2.0-20190409.tar.xz](https://github.com/kendryte/kendryte-gnu-toolchain/releases/download/v8.2.0-20190409/kendryte-toolchain-win-i386-8.2.0-20190409.tar.xz)
 
+### Compile
 Please remember to change SPI SD Card pin layout in `project_cfg.h`:
 
 ```
@@ -59,3 +71,9 @@ $ cd llm-embedded/linux
 $ make
 $ ./hello-llm
 ```
+
+## References
+
+- https://github.com/karpathy/llama2.c/
+- https://github.com/DaveBben/esp32-llm
+  
