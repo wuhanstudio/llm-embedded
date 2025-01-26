@@ -8,7 +8,7 @@
 
 > Kendryte K210 / Raspberry Pi 4 / ESP32-S3
 
-![demo.jpg]
+![](demo.jpg)
 
 ## K210 (RISC-V 64-bit)
 
