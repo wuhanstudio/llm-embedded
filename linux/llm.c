@@ -16,12 +16,6 @@
 
 #include "llm.h"
 
-// #include "esp_log.h"
-// #include "esp_system.h"
-
-// #include "esp_attr.h"
-// #include "esp_dsp.h"
-
 #define MAP_FAILED NULL
 #define munmap(ptr, length) custom_munmap(ptr)
 #define close(fd) custom_close(fd)
@@ -33,51 +27,6 @@
 #define READY_BIT (1 << 3)
 #define ALL_SYNC_BITS (TASK_0_BIT | TASK_1_BIT)
 #define ALL_FORWARD_TASKS (FORWARD_TASK_1 | FORWARD_TASK_2)
-
-// typedef struct
-// {
-//     v4sf *xout;
-//     v4sf *x;
-//     v4sf *w;
-//     int start;
-//     int end;
-//     int n;
-//     int d;
-//     int task_num;
-// } MatMulTaskParams;
-
-// typedef struct
-// {
-//     RunState *s;
-//     TransformerWeights *w;
-//     Config *p;
-//     int pos;
-//     int start;
-//     int loff;
-//     int end;
-//     int dim;
-//     int kv_dim;
-//     int kv_mul;
-//     int hidden_dim;
-//     int head_size;
-//     int task_num;
-// } ForwardTaskParams;
-
-// EventGroupHandle_t xEventGroup;
-// EventGroupHandle_t ForwardEventGroup;
-
-// static const char *TAG = "LLM";
-// TaskHandle_t handle_forward_task = NULL;
-// TaskHandle_t matmul_task_2 = NULL;
-
-// ForwardTaskParams *forward_params = NULL;
-// MatMulTaskParams *matmul_params = NULL;
-
-// SemaphoreHandle_t semaDataReady;
-// SemaphoreHandle_t semaForwardDataReady;
-
-// void matmul_task(void *params);
-// void forward_task(void *params);
 
 void custom_munmap(void *ptr)
 {
@@ -167,7 +116,7 @@ void read_checkpoint(char *checkpoint, Config *config, TransformerWeights *weigh
     FILE *file = fopen(checkpoint, "rb");
     if (!file)
     {
-        printf("Couldn't open file %s\n", checkpoint);
+        printf("[LLM] Couldn't open file %s\n", checkpoint);
         exit(EXIT_FAILURE);
     }
     // read in the config header
@@ -178,59 +127,47 @@ void read_checkpoint(char *checkpoint, Config *config, TransformerWeights *weigh
     // negative vocab size is hacky way of signaling unshared weights. bit yikes.
     int shared_weights = config->vocab_size > 0 ? 1 : 0;
     config->vocab_size = abs(config->vocab_size);
-    printf("Vocab size if %d\n", config->vocab_size);
+
     // figure out the file size
     fseek(file, 0, SEEK_END); // move file pointer to end of file
     *file_size = ftell(file); // get the file size, in bytes
     fseek(file, 0, SEEK_SET); // move back to beginning for reading
-    printf("File size: %zu bytes\n", *file_size);
-    // printf("Free ram available: %lu\n", esp_get_free_heap_size());
+
+    printf("[LLM] File size: %zu bytes \n", *file_size);
+    // printf("[LLM] Free ram available: %lu \n", xPortGetFreeHeapSize());
+
     *data = malloc(*file_size);
     if (*data == NULL)
     {
-        printf("Malloc operation failed\n");
+        printf("[LLM] Malloc operation failed \n");
         exit(EXIT_FAILURE);
     }
     // Read the entire file into memory
     size_t bytes_read = fread(*data, 1, *file_size, file);
     if (bytes_read != *file_size)
     {
-        printf("Failed to read file into memory\n");
-        printf("Bytes read %zu bytes\n", bytes_read);
+        printf("[LLM] Failed to read file into memory \n");
+        printf("[LLM] Bytes read %zu bytes \n", bytes_read);
         exit(EXIT_FAILURE);
     }
     fclose(file);
 
-    printf("Successfully read LLM into memory\n");
-    // printf("Free ram available: %lu\n", esp_get_free_heap_size());
+    // printf("[LLM] Free ram available: %lu\n", xPortGetFreeHeapSize());
+
     v4sf *weights_ptr = *data + sizeof(Config) / sizeof(v4sf);
     memory_map_weights(weights, config, weights_ptr, shared_weights);
-    printf("Successfully read checkpoint\n");
+
+    printf("[LLM] Successfully read checkpoint\n");
 }
 
 void build_transformer(Transformer *t, char *checkpoint_path)
 {
     // read in the Config and the Weights from the checkpoint
     read_checkpoint(checkpoint_path, &t->config, &t->weights, &t->fd, &t->data, &t->file_size);
+
     // allocate the RunState buffers
     malloc_run_state(&t->state, &t->config);
-    printf("Transformer successfully built\n");
-
-    // FreeRTos Tasks
-    // xEventGroup = xEventGroupCreate();
-    // ForwardEventGroup = xEventGroupCreate();
-    // semaDataReady = xSemaphoreCreateBinary();
-    // semaForwardDataReady = xSemaphoreCreateBinary();
-    // xSemaphoreGive(semaDataReady);
-    // xSemaphoreTake(semaDataReady, portMAX_DELAY);
-    // xSemaphoreGive(semaForwardDataReady);
-    // xSemaphoreTake(semaForwardDataReady, portMAX_DELAY);
-
-    // matmul_params = malloc(sizeof(MatMulTaskParams));
-    // forward_params = malloc(sizeof(ForwardTaskParams));
-    // xTaskCreatePinnedToCore(matmul_task, "MatMul2", 2048, matmul_params, 19, &matmul_task_2, 1);             // Run on Core 1
-    // xTaskCreatePinnedToCore(forward_task, "ForwardTask", 2048, forward_params, 19, &handle_forward_task, 1); // Run on Core 1
-    // printf("Created FreeRTOS Tasks");
+    printf("[LLM] Transformer successfully built\n");
 }
 
 void free_transformer(Transformer *t)
@@ -293,123 +230,6 @@ void softmax(v4sf *x, int size)
         x[i] /= sum;
     }
 }
-
-
-// void matmul_task(void *params)
-// {
-//     const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
-//     MatMulTaskParams *p = (MatMulTaskParams *)params;
-//     TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
-//     char *tName = pcTaskGetName(current_task);
-//     // printf("Created Task %s", tName);
-//     for (;;)
-//     {
-//         if (xSemaphoreTake(semaDataReady, portMAX_DELAY) == pdTRUE)
-//         {
-//             //   printf("Started Task %s", tName);
-//             for (int i = p->start; i < p->end; i++)
-//             {
-//                 v4sf val = 0.0f;
-//                 v4sf *row = &p->w[i * p->n]; // Pointer to the start of the current row in matrix w
-//                 dsps_dotprod_f32_aes3(row, p->x, &val, p->n);
-//                 p->xout[i] = val;
-//             }
-//             //    printf("Completed task %s", tName);
-//             xSemaphoreGive(semaDataReady);
-//             xEventGroupSync(xEventGroup, p->task_num, ALL_SYNC_BITS, portMAX_DELAY);
-//         }
-//     }
-// }
-
-// void forward_task(void *params)
-// {
-//     const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
-//     ForwardTaskParams *t_params = (ForwardTaskParams *)params;
-//     TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
-//     char *tName = pcTaskGetName(current_task);
-//     // printf("Created Task %s", tName);
-//     for (;;)
-//     {
-//         if (xSemaphoreTake(semaForwardDataReady, portMAX_DELAY) == pdTRUE)
-//         {
-//             //   printf("Started Task %s", tName);
-//             int h;
-//             // #pragma omp parallel for private(h)
-//             for (h = t_params->start; h < t_params->end; h++)
-//             {
-//                 // get the query vector for this head
-//                 v4sf *q = t_params->s->q + h * t_params->head_size;
-//                 // attention scores for this head
-//                 v4sf *att = t_params->s->att + h * t_params->p->seq_len;
-//                 // iterate over all timesteps, including the current one
-//                 for (int t = 0; t <= t_params->pos; t++)
-//                 {
-//                     // get the key vector for this head and at this timestep
-//                     v4sf *k = t_params->s->key_cache + t_params->loff + t * t_params->kv_dim + (h / t_params->kv_mul) * t_params->head_size;
-//                     // calculate the attention score as the dot product of q and k
-//                     v4sf score = 0.0f;
-//                     for (int i = 0; i < t_params->head_size; i++)
-//                     {
-//                         score += q[i] * k[i];
-//                     }
-//                     score /= sqrtf(t_params->head_size);
-//                     // save the score to the attention buffer
-//                     att[t] = score;
-//                 }
-
-//                 // softmax the scores to get attention weights, from 0..pos inclusively
-//                 softmax(att, t_params->pos + 1);
-
-//                 // weighted sum of the values, store back into xb
-//                 v4sf *xb = t_params->s->xb + h * t_params->head_size;
-//                 memset(xb, 0, t_params->head_size * sizeof(v4sf));
-//                 for (int t = 0; t <= t_params->pos; t++)
-//                 {
-//                     // get the value vector for this head and at this timestep
-//                     v4sf *v = t_params->s->value_cache + t_params->loff + t * t_params->kv_dim + (h / t_params->kv_mul) * t_params->head_size;
-//                     // get the attention weight for this timestep
-//                     v4sf a = att[t];
-//                     // accumulate the weighted value into xb
-//                     for (int i = 0; i < t_params->head_size; i++)
-//                     {
-//                         xb[i] += a * v[i];
-//                     }
-//                 }
-//             }
-//             //   printf("Completed task %s", tName);
-//             xSemaphoreGive(semaForwardDataReady);
-//             xEventGroupSync(ForwardEventGroup, t_params->task_num, ALL_FORWARD_TASKS, portMAX_DELAY);
-//         }
-//     }
-// }
-
-
-// void matmul(v4sf *xout, v4sf *x, v4sf *w, int n, int d)
-// {
-
-//     // d is the number of rows
-//     // n is the number of columns
-//     // d X n
-//     *matmul_params = (MatMulTaskParams){xout, x, w, d / 2, d, n, d, TASK_1_BIT};
-//     xSemaphoreGive(semaDataReady);
-//     for (int i = 0; i < d / 2; i++)
-//     {
-//         v4sf val = 0.0f;
-//         v4sf *row = &w[i * n]; // Pointer to the start of the current row in matrix w
-//         dsps_dotprod_f32_aes3(row, x, &val, n);
-//         xout[i] = val;
-//     }
-//     if (xSemaphoreTake(semaDataReady, portMAX_DELAY) == pdTRUE)
-//     {
-//         xEventGroupSync(xEventGroup,
-//                         TASK_0_BIT,
-//                         ALL_SYNC_BITS,
-//                         portMAX_DELAY);
-
-//         xEventGroupClearBits(xEventGroup, ALL_SYNC_BITS);
-//     }
-//     //   printf("Completed MatMul tasks");
-// }
 
 void matmul(float* xout, float* x, float* w, int n, int d) {
     // W (d,n) @ x (n,) -> xout (d,)
@@ -569,7 +389,7 @@ int compare_tokens(const void *a, const void *b)
 void build_tokenizer(Tokenizer *t, char *tokenizer_path, int vocab_size)
 {
     // i should have written the vocab_size into the tokenizer file... sigh
-    printf("Vocab size is %d\n", vocab_size);
+    printf("[LLM] Vocab size is %d\n", vocab_size);
     t->vocab_size = vocab_size;
     // malloc space to hold the scores and the strings
     t->vocab = (char **)malloc(vocab_size * sizeof(char *));
@@ -584,13 +404,12 @@ void build_tokenizer(Tokenizer *t, char *tokenizer_path, int vocab_size)
     FILE *file = fopen(tokenizer_path, "rb");
     if (!file)
     {
-        printf("couldn't load %s\n", tokenizer_path);
+        printf("[LLM] Couldn't load %s\n", tokenizer_path);
         exit(EXIT_FAILURE);
     }
-    printf("Opened Tokenizer File\n");
     if (fread(&t->max_token_length, sizeof(int), 1, file) != 1)
     {
-        printf( "failed read\n");
+        printf("[LLM] Failed to read %s\n", tokenizer_path);
         exit(EXIT_FAILURE);
     }
     int len;
@@ -598,24 +417,24 @@ void build_tokenizer(Tokenizer *t, char *tokenizer_path, int vocab_size)
     {
         if (fread(t->vocab_scores + i, sizeof(v4sf), 1, file) != 1)
         {
-            printf( "failed read vocab scores \n");
+            printf("[LLM] Failed to read vocab scores \n");
             exit(EXIT_FAILURE);
         }
         if (fread(&len, sizeof(int), 1, file) != 1)
         {
-            printf( "failed read len \n");
+            printf("[LLM] Failed to read %d bytes\n", len);
             exit(EXIT_FAILURE);
         }
         t->vocab[i] = (char *)malloc(len + 1);
         if (fread(t->vocab[i], len, 1, file) != 1)
         {
-            printf( "failed read vocab \n");
+            printf("[LLM] Failed to read vocab \n");
             exit(EXIT_FAILURE);
         }
         t->vocab[i][len] = '\0'; // add the string terminating token
     }
     fclose(file);
-    printf("Tokenizer successfully built \n");
+    printf("[LLM] Tokenizer successfully built \n");
 }
 
 void free_tokenizer(Tokenizer *t)
@@ -926,7 +745,7 @@ void build_sampler(Sampler *sampler, int vocab_size, v4sf temperature, v4sf topp
     sampler->rng_state = rng_seed;
     // buffer only used with nucleus sampling; may not need but it's ~small
     sampler->probindex = malloc(sampler->vocab_size * sizeof(ProbIndex));
-    printf("Sampler Successfully built\n");
+    printf("[LLM] Sampler Successfully built\n");
 }
 
 void free_sampler(Sampler *sampler)
@@ -993,6 +812,7 @@ long time_in_ms()
     return time.tv_sec * 1000 + time.tv_nsec / 1000000;
 }
 
+
 // ----------------------------------------------------------------------------
 // generation loop
 
@@ -1010,7 +830,7 @@ void generate(Transformer *transformer, Tokenizer *tokenizer, Sampler *sampler, 
     encode(tokenizer, prompt, 1, 0, prompt_tokens, &num_prompt_tokens);
     if (num_prompt_tokens < 1)
     {
-        printf( "something is wrong, expected at least 1 prompt token \n");
+        printf("[LLM] Something is wrong, expected at least 1 prompt token \n");
         exit(EXIT_FAILURE);
     }
 
@@ -1063,12 +883,12 @@ void generate(Transformer *transformer, Tokenizer *tokenizer, Sampler *sampler, 
     {
         long end = time_in_ms();
         float tks = (pos - 1) / (double)(end - start) * 1000;
-        fprintf(stderr, "achieved tok/s: %f\n", tks);
+        fprintf(stderr, "[LLM] Achieved tok/s: %f\n", tks);
         cb_done(tks);
     }
 
     free(prompt_tokens);
-    printf("Generate complete \n");
+    printf("[LLM] Generate complete \n");
 }
 
 void read_stdin(const char *guide, char *buffer, size_t bufsize)

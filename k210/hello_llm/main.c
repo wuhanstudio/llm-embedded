@@ -18,21 +18,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
+
 #include <devices.h>
 #include <filesystem.h>
 #include <storage/sdcard.h>
 
-#include <stdio.h>
-#include <time.h>
-#include <inttypes.h>
-#include <string.h>
-
 #include "llm.h"
 
-/**
- * @brief intializes SPIFFS storage
- * 
- */
+// Define the prompt string
+#define LLM_PROMPT_STRING "One day"
+
+// Initialize th SD card
+// see project_cfg.h for the pin configuration
 handle_t init_storage(void)
 {
     handle_t spi, gpio;
@@ -44,11 +42,7 @@ handle_t init_storage(void)
     return sd0;
 }
 
-/**
- * @brief Callbacks once generation is done
- * 
- * @param tk_s The number of tokens per second generated
- */
+// Callback for when generation is complete
 void generate_complete_cb(float tk_s)
 {
     char buffer[50];
@@ -57,29 +51,31 @@ void generate_complete_cb(float tk_s)
 
 int main()
 {
-    printf("Hello sd\n");
+    printf("[LLM] Hello LLM\n");
 
+    // Initialize the SD card
     handle_t sd0 = init_storage();
     configASSERT(sd0);
     configASSERT(filesystem_mount("/fs/0/", sd0) == 0);
     io_close(sd0);
 
-    printf("Hello sd initialized\n");
-
-    // default parameters
+    // Model path
     char *checkpoint_path = "/fs/0//stories260K.bin"; // e.g. out/model.bin
     char *tokenizer_path = "/fs/0/tok512.bin";
-    float temperature = 1.0f;        // 0.0 = greedy deterministic. 1.0 = original. don't set higher
+
+    // Default parameters
+    float temperature = 0.8f;        // 0.0 = greedy deterministic. 1.0 = original. don't set higher
     float topp = 0.9f;               // top-p in nucleus sampling. 1.0 = off. 0.9 works well, but slower
     int steps = 256;                 // number of steps to run for
-    char *prompt = NULL;             // prompt string
+
+    char *prompt = LLM_PROMPT_STRING;             // prompt string
     unsigned long long rng_seed = 0; // seed rng with time by default
 
     // parameter validation/overrides
     if (rng_seed <= 0)
         rng_seed = (unsigned int)time(NULL);
 
-    printf("LLM Path is %s \n", checkpoint_path);
+    printf("[LLM] Model path: %s \n", checkpoint_path);
 
     // build the Transformer via the model .bin file
     Transformer transformer;

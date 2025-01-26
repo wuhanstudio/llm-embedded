@@ -5,6 +5,8 @@
 
 #include "llm.h"
 
+#define LLM_PROMPT_STRING NULL
+
 void generate_complete_cb(float tk_s)
 {
     char buffer[50];
@@ -13,13 +15,15 @@ void generate_complete_cb(float tk_s)
 
 int main(void)
 {
-    // default parameters
-    char *checkpoint_path = "../stories260K.bin"; // e.g. out/model.bin
-    char *tokenizer_path = "../tok512.bin";
-    float temperature = 1.0f;        // 0.0 = greedy deterministic. 1.0 = original. don't set higher
+    // Model path
+    char *checkpoint_path = "../model/stories260K.bin"; // e.g. out/model.bin
+    char *tokenizer_path = "../model/tok512.bin";
+
+    float temperature = 0.8f;        // 0.0 = greedy deterministic. 1.0 = original. don't set higher
     float topp = 0.9f;               // top-p in nucleus sampling. 1.0 = off. 0.9 works well, but slower
     int steps = 256;                 // number of steps to run for
-    char *prompt = NULL;             // prompt string
+ 
+    char *prompt = LLM_PROMPT_STRING;             // prompt string
     unsigned long long rng_seed = 0; // seed rng with time by default
 
     // parameter validation/overrides
